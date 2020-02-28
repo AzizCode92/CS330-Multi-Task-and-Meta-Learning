@@ -28,6 +28,8 @@ def loss_function(preds, labels):
     """
     #############################
     #### YOUR CODE GOES HERE ####
+    return tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
+        labels=labels[:, -1, :, :], logits=preds[:, -1, :, :]))
 
     #############################
 
@@ -52,9 +54,19 @@ class MANN(tf.keras.Model):
         """
         #############################
         #### YOUR CODE GOES HERE ####
-        pass
+
+        k = input_images.shape[1] - 1
+        n = input_images.shape[2]
+
+        zeros = tf.expand_dims(tf.zeros_like(input_labels[:, 0, :, :]), 1)
+        input_labels_mod = tf.concat([input_labels[:, :k, :, :], zeros], 1)
+        to_input = tf.concat([input_images, input_labels_mod], 3)
+        output = self.layer1(tf.reshape(to_input, shape=[-1, k * n + n, 784 + n]))
+        output = tf.nn.relu(output)
+        output = self.layer2(output)
+        output = tf.reshape(output, shape=[-1, k + 1, n, n])
         #############################
-        return out
+        return output
 
 
 ims = tf.placeholder(tf.float32, shape=(
