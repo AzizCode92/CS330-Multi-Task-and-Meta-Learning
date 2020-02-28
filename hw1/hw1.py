@@ -59,8 +59,10 @@ class MANN(tf.keras.Model):
         n = input_images.shape[2]
 
         zeros = tf.expand_dims(tf.zeros_like(input_labels[:, 0, :, :]), 1)
-        input_labels_mod = tf.concat([input_labels[:, :k, :, :], zeros], 1)
-        to_input = tf.concat([input_images, input_labels_mod], 3)
+        # Feed K labeled examples of each of N classes through network with memory
+        # Remember to pass zeros, not the ground truth labels for the final N examples.
+        input_labels_mem = tf.concat([input_labels[:, :k, :, :], zeros], 1)
+        to_input = tf.concat([input_images, input_labels_mem], 3)
         output = self.layer1(tf.reshape(to_input, shape=[-1, k * n + n, 784 + n]))
         output = tf.nn.relu(output)
         output = self.layer2(output)
@@ -87,12 +89,10 @@ optimizer_step = optim.minimize(loss)
 with tf.Session() as sess:
     sess.run(tf.local_variables_initializer())
     sess.run(tf.global_variables_initializer())
-
     for step in range(50000):
         i, l = data_generator.sample_batch('train', FLAGS.meta_batch_size)
         feed = {ims: i.astype(np.float32), labels: l.astype(np.float32)}
         _, ls = sess.run([optimizer_step, loss], feed)
-
         if step % 100 == 0:
             print("*" * 5 + "Iter " + str(step) + "*" * 5)
             i, l = data_generator.sample_batch('test', 100)
@@ -105,4 +105,15 @@ with tf.Session() as sess:
                 FLAGS.num_classes, FLAGS.num_classes)
             pred = pred[:, -1, :, :].argmax(2)
             l = l[:, -1, :, :].argmax(2)
-            print("Test Accuracy", (1.0 * (pred == l)).mean())
+            accuracy = (1.0 * (pred == l)).mean()
+            print("Test Accuracy", accuracy)
+
+            # Adding plots of `train loss`. `test loss` and `test accuracy` to Tensorboard
+            summary_writer = tf.compat.v1.summary.FileWriter("graphs")
+            acc_sum = tf.compat.v1.Summary(value=[tf.Summary.Value(tag="Test Accuracy", simple_value=accuracy)])
+            train_sum = tf.compat.v1.Summary(value=[tf.Summary.Value(tag="Train Loss", simple_value=ls)])
+            test_sum = tf.compat.v1.Summary(value=[tf.Summary.Value(tag="Test Loss", simple_value=tls)])
+            summary_writer.add_summary(acc_sum, step)
+            summary_writer.add_summary(train_sum, step)
+            summary_writer.add_summary(test_sum, step)
+            summary_writer.flush()
